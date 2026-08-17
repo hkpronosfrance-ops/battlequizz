@@ -23,9 +23,77 @@ export default function OverlayPage({ params }) {
   const timerRef = useRef(null);
   const questionRef = useRef(null); // évite les "stale closures" dans le callback Realtime
   const countsRef = useRef({ A: 0, B: 0, C: 0, D: 0 });
+  const audioCtxRef = useRef(null); // pour les sons générés (ding, whoosh, fanfare)
 
   useEffect(() => { questionRef.current = question; }, [question]);
   useEffect(() => { countsRef.current = counts; }, [counts]);
+
+  // --- Sons générés en direct (aucun fichier externe) ---
+  function getAudioCtx() {
+    if (!audioCtxRef.current) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtxRef.current = new Ctx();
+    }
+    return audioCtxRef.current;
+  }
+
+  function playDing() {
+    try {
+      const ctx = getAudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1568, ctx.currentTime + 0.09);
+      gain.gain.setValueAtTime(0.22, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.2);
+    } catch (e) { /* silencieux si Web Audio indisponible */ }
+  }
+
+  function playWhoosh() {
+    try {
+      const ctx = getAudioCtx();
+      const bufferSize = Math.floor(ctx.sampleRate * 0.35);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.Q.value = 0.7;
+      filter.frequency.setValueAtTime(150, ctx.currentTime);
+      filter.frequency.exponentialRampToValueAtTime(2800, ctx.currentTime + 0.32);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.22, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      noise.connect(filter).connect(gain).connect(ctx.destination);
+      noise.start();
+    } catch (e) { /* silencieux */ }
+  }
+
+  function playFanfare() {
+    try {
+      const ctx = getAudioCtx();
+      const notes = [523.25, 659.25, 783.99, 1046.5]; // do-mi-sol-do aigu
+      notes.forEach((freq, i) => {
+        const t = ctx.currentTime + i * 0.11;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0.001, t);
+        gain.gain.exponentialRampToValueAtTime(0.28, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.36);
+      });
+    } catch (e) { /* silencieux */ }
+  }
 
   async function refreshLeaderboard() {
     const { data } = await supabase.rpc('get_leaderboard', { p_session_id: sessionId, p_limit: 10 });
@@ -46,10 +114,15 @@ export default function OverlayPage({ params }) {
     });
     setCounts(c);
 
-    // N'anime (pop-in) que les avatars pas encore vus pour cette question
+    // N'anime (pop-in) que les avatars pas encore vus pour cette question, et joue un "ding" s'il y en a
+    let hasNewVote = false;
     OPT_LETTERS.forEach(letter => {
-      a[letter].forEach(av => seenAvatars.current[letter].add(av.username));
+      a[letter].forEach(av => {
+        if (!seenAvatars.current[letter].has(av.username)) hasNewVote = true;
+        seenAvatars.current[letter].add(av.username);
+      });
     });
+    if (hasNewVote) playDing();
     setAvatars(a);
   }
 
@@ -62,6 +135,7 @@ export default function OverlayPage({ params }) {
       setQuestion(data);
       setRevealed(null);
       setStatusLine('Tape A, B, C ou D dans le chat pour voter !');
+      playWhoosh();
       refreshVotes(data.id);
       startCountdown(data);
     } else if (!data && questionRef.current) {
@@ -86,6 +160,7 @@ export default function OverlayPage({ params }) {
     if (!q) return;
     clearInterval(timerRef.current);
     setRevealed({ correct_option: q.correct_option });
+    playFanfare();
     const total = Object.values(countsRef.current).reduce((a, b) => a + b, 0);
     const correctVotes = countsRef.current[q.correct_option] || 0;
     const pct = total > 0 ? Math.round((correctVotes / total) * 100) : 0;
