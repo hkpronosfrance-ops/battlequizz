@@ -16,6 +16,7 @@
     "tiktok-live-connector": "^2.4.3",
     "@supabase/supabase-js": "^2.45.0",
     "node-edge-tts": "^1.2.10",
+    "@aws-sdk/client-polly": "^3.1111.0",
     "axios": "^1.7.2",
     "dotenv": "^16.4.5"
   }

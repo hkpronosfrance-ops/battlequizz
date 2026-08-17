@@ -96,6 +96,31 @@ VOICE_ENABLED=true
 TTS_PROVIDER=edge
 ```
 
+### Choix du fournisseur de voix IA
+
+Trois options au choix (`TTS_PROVIDER` dans `.env`) :
+
+**Edge TTS (gratuit, illimité)** — `TTS_PROVIDER=edge`, `EDGE_VOICE=fr-FR-RemyMultilingualNeural`. Aucune clé nécessaire. ⚠️ Les voix "Multilingual" peuvent occasionnellement prononcer un mot isolé à l'anglaise (détection de langue imparfaite sur mots courts/ambigus).
+
+**Amazon Polly (recommandé — fiable + quasi gratuit)** — voix Neural verrouillées sur le français, aucun risque de mélange de langue. Gratuit ~12 mois (1M caractères/mois), puis 16$/million ensuite.
+1. Crée un compte sur [aws.amazon.com](https://aws.amazon.com)
+2. **IAM** → **Users** → **Create user** (nom libre, PAS d'accès console)
+3. **Permissions** → "Attach policies directly" → coche **`AmazonPollyReadOnlyAccess`** (accès Polly uniquement, rien d'autre)
+4. Clique sur l'utilisateur créé → **Security credentials** → **Create access key** → "Application running outside AWS" → copie l'Access key ID et le Secret access key
+5. Dans `.env` :
+   ```
+   TTS_PROVIDER=polly
+   AWS_ACCESS_KEY_ID=ta_cle
+   AWS_SECRET_ACCESS_KEY=ton_secret
+   AWS_REGION=eu-west-3
+   POLLY_VOICE_ID=Remi
+   ```
+   (`Remi` = masculine, `Lea` = féminine)
+   
+   💡 Active une alerte de facturation dans AWS Budgets pour être prévenu si tu dépasses le seuil gratuit.
+
+**ElevenLabs (payant, voix la plus expressive)** — `TTS_PROVIDER=elevenlabs`, `ELEVENLABS_API_KEY=...`, `ELEVENLABS_VOICE_ID=...`. Compte sur [elevenlabs.io](https://elevenlabs.io), ~22€/mois pour un usage régulier.
+
 Lance-le avec PM2 (auto-restart) :
 ```bash
 npm install -g pm2
