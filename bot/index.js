@@ -12,7 +12,7 @@
  */
 
 require('dotenv').config();
-const { WebcastPushConnection } = require('tiktok-live-connector');
+const { WebcastPushConnection } = require('tiktok-live-connector/legacy');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
@@ -154,7 +154,10 @@ async function closeCurrentQuestion() {
 let tiktokConnection = null;
 
 async function connectToTikTok() {
-    tiktokConnection = new WebcastPushConnection(TIKTOK_USERNAME);
+    const options = {};
+    if (process.env.EULERSTREAM_API_KEY) options.signApiKey = process.env.EULERSTREAM_API_KEY;
+
+    tiktokConnection = new WebcastPushConnection(TIKTOK_USERNAME, options);
 
     try {
         const state = await tiktokConnection.connect();

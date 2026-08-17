@@ -12,7 +12,7 @@
     "pm2:status": "pm2 status"
   },
   "dependencies": {
-    "tiktok-live-connector": "^1.2.3",
+    "tiktok-live-connector": "^2.4.3",
     "@supabase/supabase-js": "^2.45.0",
     "node-edge-tts": "^1.2.10",
     "axios": "^1.7.2",
