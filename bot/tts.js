@@ -28,14 +28,15 @@ const EDGE_VOICE = process.env.EDGE_VOICE || 'fr-FR-RemyMultilingualNeural';
 
 // --- Config Amazon Polly ---
 const POLLY_VOICE_ID = process.env.POLLY_VOICE_ID || 'Remi'; // ou "Lea" (féminine)
-const POLLY_REGION = process.env.AWS_REGION || 'eu-west-3'; // Paris
+const POLLY_ENGINE = process.env.POLLY_ENGINE || 'neural'; // "neural" ou "generative" (plus naturel, nécessite eu-central-1/us-east-1/us-west-2)
+const POLLY_REGION = process.env.AWS_REGION || 'eu-west-3'; // Paris (Neural). Pour "generative" : eu-central-1 (Frankfurt)
 
 // --- Config ElevenLabs (payant) ---
 const ELEVEN_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVEN_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
 
 function hashText(text) {
-    return crypto.createHash('md5').update(PROVIDER + '::' + EDGE_VOICE + POLLY_VOICE_ID + ELEVEN_VOICE_ID + '::' + text).digest('hex');
+    return crypto.createHash('md5').update(PROVIDER + '::' + EDGE_VOICE + POLLY_VOICE_ID + POLLY_ENGINE + ELEVEN_VOICE_ID + '::' + text).digest('hex');
 }
 
 async function generateSpeechEdge(text, filepath) {
@@ -52,7 +53,7 @@ async function generateSpeechPolly(text, filepath) {
         Text: text,
         OutputFormat: 'mp3',
         VoiceId: POLLY_VOICE_ID,
-        Engine: 'neural',
+        Engine: POLLY_ENGINE,
         LanguageCode: 'fr-FR',
     });
 
