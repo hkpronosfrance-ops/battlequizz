@@ -21,7 +21,7 @@ const ENABLED = (process.env.VOICE_ENABLED || 'true').toLowerCase() === 'true';
 const PROVIDER = (process.env.TTS_PROVIDER || 'edge').toLowerCase(); // "edge" ou "elevenlabs"
 
 // --- Config Edge TTS (gratuit) ---
-const EDGE_VOICE = process.env.EDGE_VOICE || 'fr-FR-HenriNeural'; // voix FR masculine dynamique
+const EDGE_VOICE = process.env.EDGE_VOICE || 'fr-FR-RemyMultilingualNeural'; // voix FR masculine dynamique
 // Autres voix FR à essayer : fr-FR-DeniseNeural (féminine), fr-FR-VivienneMultilingualNeural
 
 // --- Config ElevenLabs (payant) ---
