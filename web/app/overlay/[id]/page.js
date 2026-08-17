@@ -21,6 +21,11 @@ export default function OverlayPage({ params }) {
   const voiceQueue = useRef([]);
   const voicePlaying = useRef(false);
   const timerRef = useRef(null);
+  const questionRef = useRef(null); // évite les "stale closures" dans le callback Realtime
+  const countsRef = useRef({ A: 0, B: 0, C: 0, D: 0 });
+
+  useEffect(() => { questionRef.current = question; }, [question]);
+  useEffect(() => { countsRef.current = counts; }, [counts]);
 
   async function refreshLeaderboard() {
     const { data } = await supabase.rpc('get_leaderboard', { p_session_id: sessionId, p_limit: 10 });
@@ -52,16 +57,16 @@ export default function OverlayPage({ params }) {
     const { data } = await supabase.from('questions').select('*')
       .eq('session_id', sessionId).eq('status', 'active').maybeSingle();
 
-    if (data && data.id !== question?.id) {
+    if (data && data.id !== questionRef.current?.id) {
       seenAvatars.current = { A: new Set(), B: new Set(), C: new Set(), D: new Set() };
       setQuestion(data);
       setRevealed(null);
       setStatusLine('Tape A, B, C ou D dans le chat pour voter !');
       refreshVotes(data.id);
       startCountdown(data);
-    } else if (!data && question) {
+    } else if (!data && questionRef.current) {
       // La question a été clôturée entre-temps
-      handleClosed(question.id);
+      handleClosed(questionRef.current.id);
     }
   }
 
@@ -81,8 +86,8 @@ export default function OverlayPage({ params }) {
     if (!q) return;
     clearInterval(timerRef.current);
     setRevealed({ correct_option: q.correct_option });
-    const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    const correctVotes = counts[q.correct_option] || 0;
+    const total = Object.values(countsRef.current).reduce((a, b) => a + b, 0);
+    const correctVotes = countsRef.current[q.correct_option] || 0;
     const pct = total > 0 ? Math.round((correctVotes / total) * 100) : 0;
     setStatusLine(`✅ Bonne réponse : ${q.correct_option} — ${q['option_' + q.correct_option.toLowerCase()]} (${pct}% ont trouvé)`);
     refreshLeaderboard();
@@ -104,7 +109,7 @@ export default function OverlayPage({ params }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'questions', filter: `session_id=eq.${sessionId}` },
         () => loadActiveQuestion())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'answers' },
-        (payload) => { if (question && payload.new.question_id === question.id) refreshVotes(question.id); })
+        (payload) => { if (questionRef.current && payload.new.question_id === questionRef.current.id) refreshVotes(questionRef.current.id); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores', filter: `session_id=eq.${sessionId}` },
         () => refreshLeaderboard())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'voice_events', filter: `session_id=eq.${sessionId}` },
@@ -113,7 +118,7 @@ export default function OverlayPage({ params }) {
 
     return () => { supabase.removeChannel(channel); clearInterval(timerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, question?.id]);
+  }, [sessionId]);
 
   return (
     <div style={{ width: 720, minHeight: 1000, padding: 20, background: 'transparent', color: '#fff', fontFamily: "'Segoe UI', Arial, sans-serif" }}>

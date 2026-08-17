@@ -169,7 +169,7 @@ async function connectToTikTok() {
     }
 
     tiktokConnection.on('chat', async (data) => {
-        const raw = (data.comment || '').trim().toUpperCase();
+        const raw = (data.content ?? data.comment ?? '').trim().toUpperCase();
         const letter = ['A', 'B', 'C', 'D'].find(l => raw === l || raw.startsWith(l + ' '));
         if (!letter || !currentQuestion) return;
 
