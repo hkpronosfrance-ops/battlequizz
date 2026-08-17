@@ -148,6 +148,25 @@ async function closeCurrentQuestion() {
         const leaderName = leader.display_name || leader.tiktok_username;
         setTimeout(() => say(`${leaderName} est en tête du classement avec ${leader.total_points} points, félicitations !`), 5000);
     }
+
+    // Vérifie si ce palier vient de se terminer (toutes ses questions clôturées)
+    await supabase.rpc('check_palier_completion', { p_question_id: question.id });
+    const { data: palierEvents } = await supabase
+        .from('palier_events')
+        .select('*')
+        .eq('session_id', question.session_id)
+        .eq('palier', question.palier)
+        .limit(1);
+
+    if (palierEvents && palierEvents.length > 0) {
+        const names = (palierEvents[0].sans_faute_players || []).map(p => p.display_name || p.tiktok_username);
+        if (names.length > 0) {
+            const announce = names.length <= 3
+                ? names.join(', ')
+                : `${names.slice(0, 3).join(', ')} et ${names.length - 3} autres`;
+            setTimeout(() => say(`Bravo à ${announce} pour ce sans-faute sur le palier ${question.palier} ! Bonus de ${palierEvents[0].bonus_points} points !`), 10000);
+        }
+    }
 }
 
 // --- 4. Connexion au chat TikTok Live ---

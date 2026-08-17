@@ -15,7 +15,7 @@ export default function SessionPage({ params }) {
 
   const [form, setForm] = useState({
     question_text: '', option_a: '', option_b: '', option_c: '', option_d: '',
-    correct_option: '', duration_seconds: 15, points_reward: 2,
+    correct_option: '', duration_seconds: 15, points_reward: 2, palier: 1,
   });
 
   async function loadAll() {
@@ -69,9 +69,11 @@ export default function SessionPage({ params }) {
       correct_option: form.correct_option,
       duration_seconds: Number(form.duration_seconds) || 15,
       points_reward: Number(form.points_reward) || 2,
+      palier: Number(form.palier) || 1,
     });
     if (error) { alert(error.message); return; }
-    setForm({ question_text: '', option_a: '', option_b: '', option_c: '', option_d: '', correct_option: '', duration_seconds: 15, points_reward: 2 });
+    // Garde le palier actuel (pratique pour enchaîner plusieurs questions du même palier)
+    setForm({ question_text: '', option_a: '', option_b: '', option_c: '', option_d: '', correct_option: '', duration_seconds: 15, points_reward: 2, palier: form.palier });
     loadAll();
   }
 
@@ -84,13 +86,17 @@ export default function SessionPage({ params }) {
   async function startQuestion(qid) {
     // Clôture toute question déjà active dans la session avant d'en lancer une nouvelle
     const active = questions.find(q => q.status === 'active');
-    if (active) await supabase.rpc('close_question', { p_question_id: active.id });
+    if (active) {
+      await supabase.rpc('close_question', { p_question_id: active.id });
+      await supabase.rpc('check_palier_completion', { p_question_id: active.id });
+    }
     await supabase.from('questions').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', qid);
     loadAll();
   }
 
   async function stopQuestion(qid) {
     await supabase.rpc('close_question', { p_question_id: qid });
+    await supabase.rpc('check_palier_completion', { p_question_id: qid });
     loadAll();
   }
 
@@ -135,6 +141,7 @@ export default function SessionPage({ params }) {
                 </select>
                 <input type="number" placeholder="Durée (s)" value={form.duration_seconds} onChange={e => setForm({ ...form, duration_seconds: e.target.value })} />
                 <input type="number" placeholder="Points" value={form.points_reward} onChange={e => setForm({ ...form, points_reward: e.target.value })} />
+                <input type="number" placeholder="Palier" min="1" value={form.palier} onChange={e => setForm({ ...form, palier: e.target.value })} />
               </div>
               <button type="submit">+ Ajouter la question</button>
             </form>
@@ -144,7 +151,7 @@ export default function SessionPage({ params }) {
               {questions.map(q => (
                 <div className="question-row" key={q.id}>
                   <div>
-                    <strong>#{q.position}</strong> {q.question_text}
+                    <strong>#{q.position}</strong> {q.question_text} <span className="hint">(palier {q.palier})</span>
                     <div className="opts-preview">
                       A) {q.option_a} · B) {q.option_b} · C) {q.option_c} · D) {q.option_d}<br />
                       ✅ Bonne réponse : {q.correct_option} · ⏱ {q.duration_seconds}s · 🏅 {q.points_reward}pts
@@ -177,7 +184,10 @@ export default function SessionPage({ params }) {
             <div className="card">
               {leaderboard.length ? (
                 <ol>{leaderboard.map((p, i) => (
-                  <li key={i}>{p.display_name || p.tiktok_username} — <strong>{p.total_points} pts</strong> ({p.correct_answers} bonnes rép.)</li>
+                  <li key={i}>
+                    {p.display_name || p.tiktok_username} — <strong>{p.total_points} pts</strong> ({p.correct_answers} bonnes rép.)
+                    {p.sans_faute_count > 0 && <span className="badge badge-active" style={{ marginLeft: 6 }}>SF ×{p.sans_faute_count}</span>}
+                  </li>
                 ))}</ol>
               ) : <p className="hint">Pas encore de scores.</p>}
             </div>

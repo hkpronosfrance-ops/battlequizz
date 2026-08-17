@@ -14,6 +14,9 @@ export default function OverlayPage({ params }) {
   const [remaining, setRemaining] = useState(null);
   const [revealed, setRevealed] = useState(null);       // { correct_option }
   const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardPage, setLeaderboardPage] = useState(0);
+  const [playerCount, setPlayerCount] = useState(0);
+  const [palierCelebration, setPalierCelebration] = useState(null); // { palier, names, bonus_points }
   const [statusLine, setStatusLine] = useState('En attente de la prochaine question…');
 
   const seenAvatars = useRef({ A: new Set(), B: new Set(), C: new Set(), D: new Set() });
@@ -96,8 +99,10 @@ export default function OverlayPage({ params }) {
   }
 
   async function refreshLeaderboard() {
-    const { data } = await supabase.rpc('get_leaderboard', { p_session_id: sessionId, p_limit: 10 });
+    const { data } = await supabase.rpc('get_leaderboard', { p_session_id: sessionId, p_limit: 100 });
     setLeaderboard(data || []);
+    const { data: count } = await supabase.rpc('get_session_player_count', { p_session_id: sessionId });
+    setPlayerCount(count || 0);
   }
 
   async function refreshVotes(questionId) {
@@ -189,11 +194,28 @@ export default function OverlayPage({ params }) {
         () => refreshLeaderboard())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'voice_events', filter: `session_id=eq.${sessionId}` },
         (payload) => { voiceQueue.current.push(payload.new.audio_url); playNextVoice(); })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'palier_events' , filter: `session_id=eq.${sessionId}` },
+        (payload) => {
+          const names = (payload.new.sans_faute_players || []).map(p => p.display_name || p.tiktok_username);
+          if (names.length > 0) playFanfare();
+          setPalierCelebration({ palier: payload.new.palier, names, bonus_points: payload.new.bonus_points });
+          setTimeout(() => setPalierCelebration(null), 6000);
+        })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); clearInterval(timerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  // Fait défiler automatiquement les pages du classement (10 par page) si plus de 10 joueurs
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(leaderboard.length / 10));
+    if (totalPages <= 1) { setLeaderboardPage(0); return; }
+    const interval = setInterval(() => {
+      setLeaderboardPage(p => (p + 1) % totalPages);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [leaderboard.length]);
 
   return (
     <div style={{ width: 720, minHeight: 1000, padding: 20, background: 'transparent', color: '#fff', fontFamily: "'Segoe UI', Arial, sans-serif" }}>
@@ -202,16 +224,40 @@ export default function OverlayPage({ params }) {
       <div className="top-bar">
         <span>🎮 BattleQuizz LIVE</span>
         <div className="tier-bar"><div className="tier-fill" /></div>
+        <span className="player-count">👥 {playerCount}</span>
       </div>
 
-      <div className="leaderboard">
-        <h4>🏆 Classement live</h4>
-        <div className="leaderboard-grid">
-          {leaderboard.map((p, i) => (
-            <div className="row" key={i}><span><span className="rank">{i + 1}</span>{p.display_name || p.tiktok_username}</span><strong>{p.total_points}</strong></div>
-          ))}
+      {palierCelebration ? (
+        <div className="palier-celebration enter">
+          <div className="palier-title">✅ Palier {palierCelebration.palier} validé</div>
+          {palierCelebration.names.length > 0 ? (
+            <>
+              <div className="palier-subtitle">🎉 Bravo aux sans-faute !</div>
+              <div className="palier-names">{palierCelebration.names.slice(0, 12).join(' · ')}</div>
+              <div className="palier-bonus">+{palierCelebration.bonus_points} points pour chaque joueur sans-faute</div>
+            </>
+          ) : (
+            <div className="palier-subtitle">Personne n'a fait sans-faute cette fois… la prochaine !</div>
+          )}
         </div>
-      </div>
+      ) : (
+        <div className="leaderboard">
+          <div className="leaderboard-head">
+            <h4>🏆 Classement live</h4>
+            {leaderboard.length > 10 && <span className="page-indicator">Page {leaderboardPage + 1}/{Math.ceil(leaderboard.length / 10)}</span>}
+          </div>
+          <div className="leaderboard-grid">
+            {leaderboard.slice(leaderboardPage * 10, leaderboardPage * 10 + 10).map((p, i) => (
+              <div className="row" key={i}>
+                <span><span className="rank">{leaderboardPage * 10 + i + 1}</span>{p.display_name || p.tiktok_username}
+                  {p.sans_faute_count > 0 && <span className="sf-badge">SF</span>}
+                </span>
+                <strong>{p.total_points}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {question && (
         <div className="question-box enter">
@@ -248,11 +294,21 @@ const css = `
 .top-bar { display:flex; align-items:center; gap:10px; background:rgba(15,15,25,0.75); border-radius:14px; padding:10px 14px; margin-bottom:16px; font-size:14px; font-weight:600; }
 .top-bar .tier-bar { flex:1; height:6px; background:#333; border-radius:4px; overflow:hidden; }
 .top-bar .tier-fill { height:100%; background:linear-gradient(90deg,#ffb020,#ff5c2f); width:40%; }
+.top-bar .player-count { font-size:13px; opacity:.9; }
 .leaderboard { width:100%; box-sizing:border-box; background:rgba(10,12,25,.88); border:1px solid #333; border-radius:14px; padding:10px 14px; margin-bottom:16px; }
-.leaderboard h4 { margin:0 0 8px; font-size:13px; text-transform:uppercase; color:#ffb020; }
+.leaderboard-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.leaderboard h4 { margin:0; font-size:13px; text-transform:uppercase; color:#ffb020; }
+.page-indicator { font-size:11px; color:#8a8fae; }
 .leaderboard-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 14px; }
 .leaderboard .row { display:flex; justify-content:space-between; font-size:13px; padding:4px 0; border-bottom:1px solid #222; }
 .leaderboard .rank { color:#888; width:20px; display:inline-block; }
+.sf-badge { background:#ffb020; color:#1a1a1a; font-size:9px; font-weight:800; padding:1px 5px; border-radius:6px; margin-left:6px; vertical-align:middle; }
+.palier-celebration { width:100%; box-sizing:border-box; background:linear-gradient(135deg, rgba(15,50,30,.94), rgba(10,35,25,.94)); border:2px solid #22c55e; border-radius:16px; padding:24px; margin-bottom:16px; text-align:center; }
+.palier-title { font-size:20px; font-weight:800; color:#4ade80; margin-bottom:8px; }
+.palier-subtitle { font-size:14px; color:#ffe08a; margin-bottom:10px; }
+.palier-names { font-size:13px; color:#fff; line-height:1.6; margin-bottom:10px; }
+.palier-bonus { font-size:13px; color:#4ade80; font-weight:700; }
+.palier-celebration.enter { animation: questionPop .5s cubic-bezier(.34,1.56,.64,1) both; }
 .question-box { background:linear-gradient(135deg, rgba(20,25,50,.92), rgba(30,20,55,.92)); border:2px solid #3d5cff; border-radius:16px; padding:22px; margin:16px 0; text-align:center; position:relative; }
 .question-box .qtext { font-size:24px; font-weight:700; color:#ffe08a; line-height:1.35; }
 .timer-circle { position:absolute; top:14px; right:14px; width:46px; height:46px; border-radius:50%; border:4px solid #3d5cff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px; background:rgba(0,0,0,.4); }
